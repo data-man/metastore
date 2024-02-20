@@ -50,9 +50,21 @@ OPTIONS
               Causes metastore to print less verbose messages. Can be repeated
               more than once for even less verbosity.
 
+       -A, --atime
+              Causes metastore to also take atime into account for the compare
+              or apply actions.
+
+       -C, --ctime
+              Causes metastore to also take ctime into account for the compare
+              action.
+
        -m, --mtime
               Causes metastore to also take mtime into account for the compare
               or apply actions.
+
+       -S, --size
+              Causes metastore to also take size into account for the compare
+              action.
 
        -e, --empty-dirs
               Also attempts to recreate missing empty directories. May be use‐

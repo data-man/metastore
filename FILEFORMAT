@@ -29,10 +29,15 @@ Following sections explain internals of metastore file (.metadata).
     CSTRING     - Owner (owner name, not uid)
     CSTRING     - Group (group name, not gid)
 
+    INT(8)      - Atime (seconds)
+    INT(8)      - Atime (nanoseconds)
+    INT(8)      - Ctime (seconds)
+    INT(8)      - Ctime (nanoseconds)
     INT(8)      - Mtime (seconds)
     INT(8)      - Mtime (nanoseconds)
     INT(2)      - Mode  (st_mode from struct stat st_mode AND 0177777,
                          i.e. unix permissions and type of file)
+    INT(8)      - Size (bytes)
 
     INT(4)      - num_xattrs
     FOR (i = 0; i < num_xattrs; i++) {

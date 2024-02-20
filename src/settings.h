@@ -23,7 +23,10 @@
 /* Data structure to hold metastore settings */
 struct metasettings {
 	char *metafile;          /* path to the file containing the metadata */
+	bool do_atime;           /* should atimes be corrected? */
+	bool do_ctime;           /* should ctimes be checked? */
 	bool do_mtime;           /* should mtimes be corrected? */
+	bool do_size;            /* should size be checked? */
 	bool do_emptydirs;       /* should empty dirs be recreated? */
 	bool do_removeemptydirs; /* should new empty dirs be removed? */
 	bool do_git;             /* should .git dirs be processed? */

@@ -35,10 +35,14 @@ struct metaentry {
 
 	char    *owner;
 	char    *group;
-	mode_t   mode;
+	time_t   atime;
+	long     atimensec;
+	time_t   ctime;
+	long     ctimensec;
 	time_t   mtime;
 	long     mtimensec;
-
+	mode_t   mode;
+	long     size;
 	unsigned xattrs;
 	char   **xattr_names;
 	ssize_t *xattr_lvalues;
@@ -76,10 +80,13 @@ int mentry_find_xattr(struct metaentry *haystack,
 #define DIFF_GROUP 0x02
 #define DIFF_MODE  0x04
 #define DIFF_TYPE  0x08
-#define DIFF_MTIME 0x10
-#define DIFF_XATTR 0x20
-#define DIFF_ADDED 0x40
-#define DIFF_DELE  0x80
+#define DIFF_SIZE  0x10
+#define DIFF_ATIME 0x20
+#define DIFF_CTIME 0x40
+#define DIFF_MTIME 0x80
+#define DIFF_XATTR 0x100
+#define DIFF_ADDED 0x200
+#define DIFF_DELE  0x400
 
 /* Compares two metaentries and returns an int with a bitmask of differences */
 int mentry_compare(struct metaentry *left,

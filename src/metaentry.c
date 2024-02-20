@@ -164,9 +164,14 @@ mentry_print(const struct metaentry *mentry)
 	msg(MSG_DEBUG, "path\t\t: %s\n", mentry->path);
 	msg(MSG_DEBUG, "owner\t\t: %s\n", mentry->owner);
 	msg(MSG_DEBUG, "group\t\t: %s\n", mentry->group);
+	msg(MSG_DEBUG, "atime\t\t: %ld\n", (unsigned long)mentry->atime);
+	msg(MSG_DEBUG, "atimensec\t: %ld\n", (unsigned long)mentry->atimensec);
+	msg(MSG_DEBUG, "ctime\t\t: %ld\n", (unsigned long)mentry->ctime);
+	msg(MSG_DEBUG, "ctimensec\t: %ld\n", (unsigned long)mentry->ctimensec);
 	msg(MSG_DEBUG, "mtime\t\t: %ld\n", (unsigned long)mentry->mtime);
 	msg(MSG_DEBUG, "mtimensec\t: %ld\n", (unsigned long)mentry->mtimensec);
 	msg(MSG_DEBUG, "mode\t\t: %ld\n", (unsigned long)mentry->mode);
+	msg(MSG_DEBUG, "size\t\t: %ld\n", (unsigned long)mentry->size);
 	for (i = 0; i < mentry->xattrs; i++) {
 		msg(MSG_DEBUG, "xattr[%i]\t: %s=\"", i, mentry->xattr_names[i]);
 		binary_print(mentry->xattr_values[i], mentry->xattr_lvalues[i]);
@@ -233,6 +238,11 @@ mentry_create(const char *path)
 	mentry->owner = xstrdup(pbuf->pw_name);
 	mentry->group = xstrdup(gbuf->gr_name);
 	mentry->mode = sbuf.st_mode & 0177777;
+	mentry->size = sbuf.st_size;
+	mentry->atime = sbuf.st_atim.tv_sec;
+	mentry->atimensec = sbuf.st_atim.tv_nsec;
+	mentry->ctime = sbuf.st_ctim.tv_sec;
+	mentry->ctimensec = sbuf.st_ctim.tv_nsec;
 	mentry->mtime = sbuf.st_mtim.tv_sec;
 	mentry->mtimensec = sbuf.st_mtim.tv_nsec;
 
@@ -429,9 +439,14 @@ mentries_tofile(const struct metahash *mhash, const char *path)
 			write_string(mentry->path, to);
 			write_string(mentry->owner, to);
 			write_string(mentry->group, to);
+			write_int((uint64_t)mentry->atime, 8, to);
+			write_int((uint64_t)mentry->atimensec, 8, to);
+			write_int((uint64_t)mentry->ctime, 8, to);
+			write_int((uint64_t)mentry->ctimensec, 8, to);
 			write_int((uint64_t)mentry->mtime, 8, to);
 			write_int((uint64_t)mentry->mtimensec, 8, to);
 			write_int((uint64_t)mentry->mode, 2, to);
+			write_int((uint64_t)mentry->size, 8, to);
 			write_int(mentry->xattrs, 4, to);
 			for (i = 0; i < mentry->xattrs; i++) {
 				write_string(mentry->xattr_names[i], to);
@@ -512,9 +527,14 @@ mentries_fromfile(struct metahash **mhash, const char *path)
 		mentry->pathlen = strlen(mentry->path);
 		mentry->owner = read_string(&ptr, max);
 		mentry->group = read_string(&ptr, max);
+		mentry->atime = (time_t)read_int(&ptr, 8, max);
+		mentry->atimensec = (time_t)read_int(&ptr, 8, max);
+		mentry->ctime = (time_t)read_int(&ptr, 8, max);
+		mentry->ctimensec = (time_t)read_int(&ptr, 8, max);
 		mentry->mtime = (time_t)read_int(&ptr, 8, max);
 		mentry->mtimensec = (time_t)read_int(&ptr, 8, max);
 		mentry->mode = (mode_t)read_int(&ptr, 2, max);
+		mentry->size = (mode_t)read_int(&ptr, 8, max);
 		mentry->xattrs = (unsigned)read_int(&ptr, 4, max);
 
 		if (!mentry->xattrs) {
@@ -611,6 +631,23 @@ mentry_compare(struct metaentry *left, struct metaentry *right, msettings *st)
 	if ((left->mode & S_IFMT) != (right->mode & S_IFMT))
 		retval |= DIFF_TYPE;
 
+	if (st->do_size && strcmp(left->path, st->metafile) &&
+	    (   left->size     != right->size)
+	   )
+		retval |= DIFF_SIZE;
+
+	if (st->do_atime && strcmp(left->path, st->metafile) &&
+	    (   left->atime     != right->atime
+	     || left->atimensec != right->atimensec)
+	   )
+		retval |= DIFF_ATIME;
+
+	if (st->do_ctime && strcmp(left->path, st->metafile) &&
+	    (   left->ctime     != right->ctime
+	     || left->ctimensec != right->ctimensec)
+	   )
+		retval |= DIFF_CTIME;
+
 	if (st->do_mtime && strcmp(left->path, st->metafile) &&
 	    (   left->mtime     != right->mtime
 	     || left->mtimensec != right->mtimensec)
@@ -666,20 +703,35 @@ mentries_dump(struct metahash *mhash)
 {
 	const struct metaentry *mentry;
 	char mode[11 + 1] = "";
-	char date[12 + 2 + 2 + 2*1 + 1 + 2 + 2 + 2 + 2*1 + 1] = "";
-	char zone[5 + 1] = "";
-	struct tm cal;
+	char adate[12 + 2 + 2 + 2*1 + 1 + 2 + 2 + 2 + 2*1 + 1] = "";
+	char azone[5 + 1] = "";
+	struct tm acal;
+	char cdate[12 + 2 + 2 + 2*1 + 1 + 2 + 2 + 2 + 2*1 + 1] = "";
+	char czone[5 + 1] = "";
+	struct tm ccal;
+	char mdate[12 + 2 + 2 + 2*1 + 1 + 2 + 2 + 2 + 2*1 + 1] = "";
+	char mzone[5 + 1] = "";
+	struct tm mcal;
 
 	for (int key = 0; key < HASH_INDEXES; key++) {
 		for (mentry = mhash->bucket[key]; mentry; mentry = mentry->next) {
 			strmode(mentry->mode, mode);
-			localtime_r(&mentry->mtime, &cal);
-			strftime(date, sizeof(date), "%F %T", &cal);
-			strftime(zone, sizeof(zone), "%z", &cal);
-			printf("%s\t%s\t%s\t%s.%09ld %s\t%s%s\n",
+			localtime_r(&mentry->atime, &acal);
+			strftime(adate, sizeof(adate), "%F %T", &acal);
+			strftime(azone, sizeof(azone), "%z", &acal);
+			localtime_r(&mentry->ctime, &ccal);
+			strftime(cdate, sizeof(cdate), "%F %T", &ccal);
+			strftime(czone, sizeof(czone), "%z", &ccal);
+			localtime_r(&mentry->mtime, &mcal);
+			strftime(mdate, sizeof(mdate), "%F %T", &mcal);
+			strftime(mzone, sizeof(mzone), "%z", &mcal);
+			printf("%s\t%9ld\t%s\t%s\t%s.%09ld %s\t%s.%09ld %s\t%s.%09ld %s\t%s%s\n",
 			       mode,
+			       mentry->size,
 			       mentry->owner, mentry->group,
-			       date, mentry->mtimensec, zone,
+			       adate, mentry->atimensec, azone,
+			       cdate, mentry->ctimensec, czone,
+			       mdate, mentry->mtimensec, mzone,
 			       mentry->path, S_ISDIR(mentry->mode) ? "/" : "");
 			for (unsigned i = 0; i < mentry->xattrs; i++) {
 				printf("\t\t\t\t%s%s\t%s=",

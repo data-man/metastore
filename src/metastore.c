@@ -43,6 +43,9 @@
 /* metastore settings */
 static struct metasettings settings = {
 	.metafile = METAFILE,
+	.do_size = false,
+	.do_atime = false,
+	.do_ctime = false,
 	.do_mtime = false,
 	.do_emptydirs = false,
 	.do_removeemptydirs = false,
@@ -119,8 +122,14 @@ compare_print(struct metaentry *real, struct metaentry *stored, int cmp)
 		msg(MSG_QUIET, "group ");
 	if (cmp & DIFF_MODE)
 		msg(MSG_QUIET, "mode ");
+	if (cmp & DIFF_SIZE)
+		msg(MSG_QUIET, "size ");
 	if (cmp & DIFF_TYPE)
 		msg(MSG_QUIET, "type ");
+	if (cmp & DIFF_ATIME)
+		msg(MSG_QUIET, "atime ");
+	if (cmp & DIFF_CTIME)
+		msg(MSG_QUIET, "ctime ");
 	if (cmp & DIFF_MTIME)
 		msg(MSG_QUIET, "mtime ");
 	if (cmp & DIFF_XATTR)
@@ -220,6 +229,18 @@ compare_fix(struct metaentry *real, struct metaentry *stored, int cmp)
 		    real->path, real->mode & 07777, stored->mode & 07777);
 		if (chmod(real->path, stored->mode & 07777))
 			msg(MSG_DEBUG, "\tchmod failed: %s\n", strerror(errno));
+	}
+
+	if (cmp & DIFF_ATIME) {
+		msg(MSG_NORMAL, "%s:\tchanging atime from %ld.%09ld to %ld.%09ld\n",
+		    real->path, real->atime, real->atimensec, stored->atime, stored->atimensec);
+		times[0].tv_sec  = stored->atime;     // atime (last access time)
+		times[0].tv_nsec = stored->atimensec;
+		times[1].tv_nsec = UTIME_OMIT;        // mtime (last modification time)
+		if (utimensat(AT_FDCWD, real->path, times, AT_SYMLINK_NOFOLLOW)) {
+			msg(MSG_DEBUG, "\tutimensat failed: %s\n", strerror(errno));
+			return;
+		}
 	}
 
 	if (cmp & DIFF_MTIME) {
@@ -455,7 +476,10 @@ usage(const char *arg0, const char *message)
 "Valid OPTIONS are:\n"
 "  -v, --verbose            Print more verbose messages\n"
 "  -q, --quiet              Print less verbose messages\n"
+"  -A, --atime              Also take atime into account for diff or apply\n"
+"  -C, --ctime              Also take ctime into account for diff\n"
 "  -m, --mtime              Also take mtime into account for diff or apply\n"
+"  -S, --size               Also take size into account for diff\n"
 "  -e, --empty-dirs         Recreate missing empty directories\n"
 "  -E, --remove-empty-dirs  Remove extra empty directories\n"
 "  -g, --git                Do not omit .git directories\n"
@@ -475,6 +499,9 @@ static struct option long_options[] = {
 	{ "help",              no_argument,       NULL, 'h' },
 	{ "verbose",           no_argument,       NULL, 'v' },
 	{ "quiet",             no_argument,       NULL, 'q' },
+	{ "size",              no_argument,       NULL, 'S' },
+	{ "atime",             no_argument,       NULL, 'A' },
+	{ "ctime",             no_argument,       NULL, 'C' },
 	{ "mtime",             no_argument,       NULL, 'm' },
 	{ "empty-dirs",        no_argument,       NULL, 'e' },
 	{ "remove-empty-dirs", no_argument,       NULL, 'E' },
@@ -496,7 +523,7 @@ main(int argc, char **argv)
 	i = 0;
 	while (1) {
 		int option_index = 0;
-		c = getopt_long(argc, argv, "csadVhvqmeEgf:",
+		c = getopt_long(argc, argv, "csadVhvqmSACeEgf:",
 		                long_options, &option_index);
 		if (c == -1)
 			break;
@@ -509,6 +536,9 @@ main(int argc, char **argv)
 		case 'h': /* help */              action |= ACTION_HELP;  i++;   break;
 		case 'v': /* verbose */           adjust_verbosity(1);           break;
 		case 'q': /* quiet */             adjust_verbosity(-1);          break;
+		case 'S': /* size */              settings.do_size = true;       break;
+		case 'A': /* atime */             settings.do_atime = true;      break;
+		case 'C': /* ctime */             settings.do_ctime = true;      break;
 		case 'm': /* mtime */             settings.do_mtime = true;      break;
 		case 'e': /* empty-dirs */        settings.do_emptydirs = true;  break;
 		case 'E': /* remove-empty-dirs */ settings.do_removeemptydirs = true;

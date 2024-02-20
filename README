@@ -10,7 +10,7 @@ all metadata, making it unsuitable for e.g. storing /etc in a
 repository.
 
 metastore can also be helpful if you want to create a tarball of a file
-tree and make sure that "everything" (e.g. xattrs, mtime, owner, group)
+tree and make sure that "everything" (e.g. xattrs, atime, ctime, mtime, owner, group)
 is stored along with the files.
 
 
@@ -23,7 +23,7 @@ metastore stores following metadata in its files:
 - group,
 - permissions,
 - xattrs,
-- mtime - optionally.
+- atime, ctime, mtime - optionally.
 
 
 Usage
